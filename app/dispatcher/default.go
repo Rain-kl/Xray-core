@@ -26,6 +26,43 @@ import (
 
 var errSniffingTimeout = errors.New("timeout on sniffing")
 
+type rateLimitedWriter struct {
+	buf.Writer
+	limiter *protocol.RateLimiter
+}
+
+func (w *rateLimitedWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
+	if w.limiter != nil && !mb.IsEmpty() {
+		w.limiter.Wait(int(mb.Len()))
+	}
+	return w.Writer.WriteMultiBuffer(mb)
+}
+
+type rateLimitedReader struct {
+	reader  buf.Reader
+	limiter *protocol.RateLimiter
+}
+
+func (r *rateLimitedReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
+	mb, err := r.reader.ReadMultiBuffer()
+	if r.limiter != nil && !mb.IsEmpty() {
+		r.limiter.Wait(int(mb.Len()))
+	}
+	return mb, err
+}
+
+func (r *rateLimitedReader) ReadMultiBufferTimeout(timeout time.Duration) (buf.MultiBuffer, error) {
+	timeoutReader, ok := r.reader.(buf.TimeoutReader)
+	if !ok {
+		return nil, buf.ErrNotTimeoutReader
+	}
+	mb, err := timeoutReader.ReadMultiBufferTimeout(timeout)
+	if r.limiter != nil && !mb.IsEmpty() {
+		r.limiter.Wait(int(mb.Len()))
+	}
+	return mb, err
+}
+
 type cachedReader struct {
 	sync.Mutex
 	reader buf.TimeoutReader // *pipe.Reader or *buf.TimeoutWrapperReader
@@ -167,6 +204,19 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 
 	var uplink, downlink stats.Counter
 	if user != nil && len(user.Email) > 0 {
+		if limiter := user.GetUplinkLimiter(); limiter != nil {
+			inboundLink.Writer = &rateLimitedWriter{
+				Writer:  inboundLink.Writer,
+				limiter: limiter,
+			}
+		}
+		if limiter := user.GetDownlinkLimiter(); limiter != nil {
+			outboundLink.Writer = &rateLimitedWriter{
+				Writer:  outboundLink.Writer,
+				limiter: limiter,
+			}
+		}
+
 		p := d.policy.ForLevel(user.Level)
 		if p.Stats.UserUplink {
 			name := "user>>>" + user.Email + ">>>traffic>>>uplink"
@@ -246,6 +296,14 @@ func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager st
 		}
 	}
 
+	if user != nil && len(user.Email) > 0 {
+		if limiter := user.GetUplinkLimiter(); limiter != nil {
+			link.Reader = &rateLimitedReader{reader: link.Reader, limiter: limiter}
+		}
+		if limiter := user.GetDownlinkLimiter(); limiter != nil {
+			link.Writer = &rateLimitedWriter{Writer: link.Writer, limiter: limiter}
+		}
+	}
 	return link
 }
 
