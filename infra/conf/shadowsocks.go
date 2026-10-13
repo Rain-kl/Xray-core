@@ -34,6 +34,7 @@ type ShadowsocksUserConfig struct {
 	Email    string   `json:"email"`
 	Address  *Address `json:"address"`
 	Port     uint16   `json:"port"`
+	RateLimitConfig
 }
 
 type ShadowsocksServerConfig struct {
@@ -44,6 +45,7 @@ type ShadowsocksServerConfig struct {
 	Users       []*ShadowsocksUserConfig `json:"users"`
 	Clients     []*ShadowsocksUserConfig `json:"clients"`
 	NetworkList *NetworkList             `json:"network"`
+	RateLimitConfig
 }
 
 func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
@@ -51,6 +53,9 @@ func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 
 	if v.Clients != nil {
 		v.Users = v.Clients
+	}
+	if len(v.Users) > 0 && v.RateLimitConfig.HasLimits() {
+		return nil, errors.New("shadowsocks multi-user: use per-user rate limit fields")
 	}
 
 	if _, err := shadowsocks_2022.GetCipherMethod(v.Cipher); err == nil {
@@ -81,6 +86,7 @@ func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 					Level:   uint32(user.Level),
 					Account: serial.ToTypedMessage(account),
 				}
+				user.RateLimitConfig.Apply(config.Users[idx])
 				return nil
 			}
 			if err := task.ParallelForN(len(v.Users), processUser); err != nil {
@@ -98,11 +104,13 @@ func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 		if account.CipherType == shadowsocks.CipherType_UNKNOWN {
 			return nil, errors.New("unknown cipher method: ", v.Cipher)
 		}
-		config.Users = append(config.Users, &protocol.User{
+		user := &protocol.User{
 			Email:   v.Email,
 			Level:   uint32(v.Level),
 			Account: serial.ToTypedMessage(account),
-		})
+		}
+		v.RateLimitConfig.Apply(user)
+		config.Users = append(config.Users, user)
 	}
 
 	return config, nil
@@ -111,6 +119,9 @@ func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 func buildShadowsocks2022(v *ShadowsocksServerConfig) (proto.Message, error) {
 	v.Cipher = strings.ToLower(v.Cipher)
 	if len(v.Users) == 0 {
+		if v.RateLimitConfig.HasLimits() {
+			return nil, errors.New("shadowsocks 2022 (single-user): rate limits are unsupported")
+		}
 		config := new(shadowsocks_2022.ServerConfig)
 		config.Method = v.Cipher
 		config.Key = v.Password
@@ -119,7 +130,6 @@ func buildShadowsocks2022(v *ShadowsocksServerConfig) (proto.Message, error) {
 		config.Level = int32(v.Level)
 		return config, nil
 	}
-
 	if v.Cipher == "" {
 		return nil, errors.New("shadowsocks 2022 (multi-user): missing server method")
 	}
@@ -147,6 +157,7 @@ func buildShadowsocks2022(v *ShadowsocksServerConfig) (proto.Message, error) {
 				Level:   uint32(user.Level),
 				Account: serial.ToTypedMessage(account),
 			}
+			user.RateLimitConfig.Apply(config.Users[idx])
 			return nil
 		}
 		if err := task.ParallelForN(len(v.Users), processUser); err != nil {
@@ -160,6 +171,9 @@ func buildShadowsocks2022(v *ShadowsocksServerConfig) (proto.Message, error) {
 	config.Key = v.Password
 	config.Network = v.NetworkList.Build()
 	for _, user := range v.Users {
+		if user.RateLimitConfig.HasLimits() {
+			return nil, errors.New("shadowsocks 2022 (relay): rate limits are unsupported")
+		}
 		if user.Cipher != "" {
 			return nil, errors.New("shadowsocks 2022 (relay): users must have empty method")
 		}
@@ -184,6 +198,7 @@ type ShadowsocksServerTarget struct {
 	Email    string   `json:"email"`
 	Cipher   string   `json:"method"`
 	Password string   `json:"password"`
+	RateLimitConfig
 }
 
 type ShadowsocksClientConfig struct {
@@ -194,20 +209,25 @@ type ShadowsocksClientConfig struct {
 	Cipher   string                     `json:"method"`
 	Password string                     `json:"password"`
 	Servers  []*ShadowsocksServerTarget `json:"servers"`
+	RateLimitConfig
 }
 
 func (v *ShadowsocksClientConfig) Build() (proto.Message, error) {
 	errors.PrintNonRemovalDeprecatedFeatureWarning("Shadowsocks (with no Forward Secrecy, etc.)", "VLESS Encryption")
 
+	if len(v.Servers) > 0 && v.RateLimitConfig.HasLimits() {
+		return nil, errors.New("shadowsocks servers: set rate limit fields on the target")
+	}
 	if v.Address != nil {
 		v.Servers = []*ShadowsocksServerTarget{
 			{
-				Address:  v.Address,
-				Port:     v.Port,
-				Level:    v.Level,
-				Email:    v.Email,
-				Cipher:   v.Cipher,
-				Password: v.Password,
+				Address:         v.Address,
+				Port:            v.Port,
+				Level:           v.Level,
+				Email:           v.Email,
+				Cipher:          v.Cipher,
+				Password:        v.Password,
+				RateLimitConfig: v.RateLimitConfig,
 			},
 		}
 	}
@@ -227,6 +247,9 @@ func (v *ShadowsocksClientConfig) Build() (proto.Message, error) {
 	}
 
 	if _, err := shadowsocks_2022.GetCipherMethod(server.Cipher); err == nil {
+		if server.RateLimitConfig.HasLimits() {
+			return nil, errors.New("shadowsocks 2022 client: rate limits are unsupported")
+		}
 		config := new(shadowsocks_2022.ClientConfig)
 		config.Address = server.Address.Build()
 		config.Port = uint32(server.Port)
@@ -242,14 +265,16 @@ func (v *ShadowsocksClientConfig) Build() (proto.Message, error) {
 	if account.CipherType == shadowsocks.CipherType_UNKNOWN {
 		return nil, errors.New("unknown cipher method: ", server.Cipher)
 	}
+	user := &protocol.User{
+		Level:   uint32(server.Level),
+		Email:   server.Email,
+		Account: serial.ToTypedMessage(account),
+	}
+	server.RateLimitConfig.Apply(user)
 	ss := &protocol.ServerEndpoint{
 		Address: server.Address.Build(),
 		Port:    uint32(server.Port),
-		User: &protocol.User{
-			Level:   uint32(server.Level),
-			Email:   server.Email,
-			Account: serial.ToTypedMessage(account),
-		},
+		User:    user,
 	}
 	config.Server = ss
 

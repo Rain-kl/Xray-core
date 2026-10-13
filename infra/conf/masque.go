@@ -42,6 +42,7 @@ type MasqueUserConfig struct {
 	Pass  string `json:"pass"`
 	Level uint32 `json:"level"`
 	Email string `json:"email"`
+	RateLimitConfig
 }
 
 type MasqueServerConfig struct {
@@ -75,11 +76,13 @@ func (c *MasqueServerConfig) Build() (proto.Message, error) {
 			return nil, errors.New(`MASQUE: duplicate "email" `, user.Email)
 		}
 		emails[email] = true
-		config.Users = append(config.Users, &protocol.User{
+		userRecord := &protocol.User{
 			Email:   user.Email,
 			Level:   user.Level,
 			Account: serial.ToTypedMessage(&masque.Account{Password: user.Pass}),
-		})
+		}
+		user.RateLimitConfig.Apply(userRecord)
+		config.Users = append(config.Users, userRecord)
 	}
 	if len(c.Address) == 0 {
 		return nil, errors.New(`MASQUE: "address" is not set`)

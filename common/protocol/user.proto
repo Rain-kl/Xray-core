@@ -18,4 +18,6 @@ message User {
   xray.common.serial.TypedMessage account = 3;
   uint64 uplink_speed_limit = 4;
   uint64 downlink_speed_limit = 5;
+  string rate_limit_group = 6;
+  uint64 downlink_group_speed_limit = 7;
 }

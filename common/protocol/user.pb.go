@@ -29,11 +29,13 @@ type User struct {
 	Email string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
 	// Protocol specific account information. Must be the account proto in one of
 	// the proxies.
-	Account            *serial.TypedMessage `protobuf:"bytes,3,opt,name=account,proto3" json:"account,omitempty"`
-	UplinkSpeedLimit   uint64               `protobuf:"varint,4,opt,name=uplink_speed_limit,json=uplinkSpeedLimit,proto3" json:"uplink_speed_limit,omitempty"`
-	DownlinkSpeedLimit uint64               `protobuf:"varint,5,opt,name=downlink_speed_limit,json=downlinkSpeedLimit,proto3" json:"downlink_speed_limit,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	Account                 *serial.TypedMessage `protobuf:"bytes,3,opt,name=account,proto3" json:"account,omitempty"`
+	UplinkSpeedLimit        uint64               `protobuf:"varint,4,opt,name=uplink_speed_limit,json=uplinkSpeedLimit,proto3" json:"uplink_speed_limit,omitempty"`
+	DownlinkSpeedLimit      uint64               `protobuf:"varint,5,opt,name=downlink_speed_limit,json=downlinkSpeedLimit,proto3" json:"downlink_speed_limit,omitempty"`
+	RateLimitGroup          string               `protobuf:"bytes,6,opt,name=rate_limit_group,json=rateLimitGroup,proto3" json:"rate_limit_group,omitempty"`
+	DownlinkGroupSpeedLimit uint64               `protobuf:"varint,7,opt,name=downlink_group_speed_limit,json=downlinkGroupSpeedLimit,proto3" json:"downlink_group_speed_limit,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *User) Reset() {
@@ -101,17 +103,33 @@ func (x *User) GetDownlinkSpeedLimit() uint64 {
 	return 0
 }
 
+func (x *User) GetRateLimitGroup() string {
+	if x != nil {
+		return x.RateLimitGroup
+	}
+	return ""
+}
+
+func (x *User) GetDownlinkGroupSpeedLimit() uint64 {
+	if x != nil {
+		return x.DownlinkGroupSpeedLimit
+	}
+	return 0
+}
+
 var File_common_protocol_user_proto protoreflect.FileDescriptor
 
 const file_common_protocol_user_proto_rawDesc = "" +
 	"\n" +
-	"\x1acommon/protocol/user.proto\x12\x14xray.common.protocol\x1a!common/serial/typed_message.proto\"\x91\x01\n" +
-	"\x04User\x12\r\n" +
-	"\x05level\x18\x01 \x01(\r\x12\r\n" +
-	"\x05email\x18\x02 \x01(\t\x121\n" +
-	"\aaccount\x18\x03 \x01(\v2 .xray.common.serial.TypedMessage\x12\x1a\n" +
-	"\x12uplink_speed_limit\x18\x04 \x01(\x04\x12\x1c\n" +
-	"\x14downlink_speed_limit\x18\x05 \x01(\x04B^\n" +
+	"\x1acommon/protocol/user.proto\x12\x14xray.common.protocol\x1a!common/serial/typed_message.proto\"\xb5\x02\n" +
+	"\x04User\x12\x14\n" +
+	"\x05level\x18\x01 \x01(\rR\x05level\x12\x14\n" +
+	"\x05email\x18\x02 \x01(\tR\x05email\x12:\n" +
+	"\aaccount\x18\x03 \x01(\v2 .xray.common.serial.TypedMessageR\aaccount\x12,\n" +
+	"\x12uplink_speed_limit\x18\x04 \x01(\x04R\x10uplinkSpeedLimit\x120\n" +
+	"\x14downlink_speed_limit\x18\x05 \x01(\x04R\x12downlinkSpeedLimit\x12(\n" +
+	"\x10rate_limit_group\x18\x06 \x01(\tR\x0erateLimitGroup\x12;\n" +
+	"\x1adownlink_group_speed_limit\x18\a \x01(\x04R\x17downlinkGroupSpeedLimitB^\n" +
 	"\x18com.xray.common.protocolP\x01Z)github.com/xtls/xray-core/common/protocol\xaa\x02\x14Xray.Common.Protocolb\x06proto3"
 
 var (

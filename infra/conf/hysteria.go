@@ -34,6 +34,7 @@ type HysteriaUserConfig struct {
 	Auth  string `json:"auth"`
 	Level uint32 `json:"level"`
 	Email string `json:"email"`
+	RateLimitConfig
 }
 
 type HysteriaServerConfig struct {
@@ -64,6 +65,7 @@ func (c *HysteriaServerConfig) Build() (proto.Message, error) {
 				Level:   user.Level,
 				Account: serial.ToTypedMessage(acc),
 			}
+			user.RateLimitConfig.Apply(config.Users[idx])
 			return nil
 		}
 		if err := task.ParallelForN(len(c.Users), processUser); err != nil {

@@ -1,136 +1,99 @@
 package protocol
 
 import (
-	"strings"
+	"context"
 	"sync"
-	"time"
+
+	"golang.org/x/time/rate"
 )
 
-// RateLimiter is a shared token bucket for per-user byte/sec limits.
+const rateLimitBurst = 64 * 1024
+
 type RateLimiter struct {
-	mu        sync.Mutex
-	rate      float64
-	capacity  float64
-	available float64
-	last      time.Time
+	limiter *rate.Limiter
+}
+
+func NewRateLimiter(bytesPerSecond uint64) *RateLimiter {
+	if bytesPerSecond == 0 {
+		return nil
+	}
+	return &RateLimiter{limiter: rate.NewLimiter(rate.Limit(bytesPerSecond), rateLimitBurst)}
+}
+
+func (l *RateLimiter) SetRate(bytesPerSecond uint64) {
+	if l == nil {
+		return
+	}
+	limit := rate.Limit(bytesPerSecond)
+	if bytesPerSecond == 0 {
+		limit = rate.Inf
+	}
+	l.limiter.SetLimit(limit)
+}
+
+func (l *RateLimiter) Wait(ctx context.Context, size int) error {
+	if l == nil {
+		return nil
+	}
+	for size > 0 {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		chunk := min(size, rateLimitBurst)
+		if err := l.limiter.WaitN(ctx, chunk); err != nil {
+			return err
+		}
+		size -= chunk
+	}
+	return nil
+}
+
+type limiterEntry struct {
+	limiter *RateLimiter
+	refs    int
+}
+
+type limiterRegistry struct {
+	mu     sync.Mutex
+	byUser map[string]*limiterEntry
 }
 
 var globalLimiterRegistry = newLimiterRegistry()
 
-type limiterRegistry struct {
-	mu     sync.Mutex
-	byUser map[string]*RateLimiter
-}
-
 func newLimiterRegistry() *limiterRegistry {
-	return &limiterRegistry{
-		byUser: make(map[string]*RateLimiter),
-	}
+	return &limiterRegistry{byUser: make(map[string]*limiterEntry)}
 }
 
-func normalizeLimiterKey(email, direction string) string {
-	email = strings.TrimSpace(strings.ToLower(email))
-	if email == "" {
-		return ""
-	}
-	return direction + ":" + email
-}
-
-func (r *limiterRegistry) Get(email, direction string, rate uint64) *RateLimiter {
-	key := normalizeLimiterKey(email, direction)
-	if key == "" {
-		return NewRateLimiter(rate)
-	}
-
+func (r *limiterRegistry) Update(email, direction string, bytesPerSecond uint64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
-	limiter, found := r.byUser[key]
-	if !found {
-		limiter = NewRateLimiter(rate)
-		if limiter == nil {
-			limiter = &RateLimiter{}
-		}
-		r.byUser[key] = limiter
+	if entry := r.byUser[direction+":"+email]; entry != nil {
+		entry.limiter.SetRate(bytesPerSecond)
 	}
-	limiter.SetRate(rate)
-	return limiter
 }
 
-func NewRateLimiter(rate uint64) *RateLimiter {
-	limiter := &RateLimiter{}
-	limiter.SetRate(rate)
-	return limiter
-}
-
-func (l *RateLimiter) SetRate(rate uint64) {
-	if l == nil {
-		return
+func (r *limiterRegistry) Acquire(ctx context.Context, email, direction string, bytesPerSecond uint64) *RateLimiter {
+	if bytesPerSecond == 0 {
+		return nil
 	}
-
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	now := time.Now()
-	if !l.last.IsZero() && l.rate > 0 {
-		elapsed := now.Sub(l.last).Seconds()
-		if elapsed > 0 {
-			l.available += elapsed * l.rate
+	key := direction + ":" + email
+	r.mu.Lock()
+	entry := r.byUser[key]
+	if entry == nil {
+		entry = &limiterEntry{limiter: NewRateLimiter(bytesPerSecond)}
+		r.byUser[key] = entry
+	} else {
+		entry.limiter.SetRate(bytesPerSecond)
+	}
+	entry.refs++
+	r.mu.Unlock()
+	context.AfterFunc(ctx, func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		entry.refs--
+		if entry.refs == 0 && r.byUser[key] == entry {
+			delete(r.byUser, key)
 		}
-	}
-
-	l.rate = float64(rate)
-	if rate == 0 {
-		l.capacity = 0
-		l.available = 0
-		l.last = now
-		return
-	}
-
-	capacity := float64(rate)
-	if capacity < 64*1024 {
-		capacity = 64 * 1024
-	}
-	l.capacity = capacity
-	if l.available > capacity || l.last.IsZero() {
-		l.available = capacity
-	}
-	l.last = now
-}
-
-func (l *RateLimiter) Wait(size int) {
-	if l == nil || size <= 0 {
-		return
-	}
-
-	need := float64(size)
-	for {
-		l.mu.Lock()
-		if l.rate <= 0 {
-			l.mu.Unlock()
-			return
-		}
-		now := time.Now()
-		elapsed := now.Sub(l.last).Seconds()
-		if elapsed > 0 {
-			l.available += elapsed * l.rate
-			if l.available > l.capacity {
-				l.available = l.capacity
-			}
-			l.last = now
-		}
-		if l.available >= need {
-			l.available -= need
-			l.mu.Unlock()
-			return
-		}
-		missing := need - l.available
-		wait := time.Duration(missing / l.rate * float64(time.Second))
-		l.mu.Unlock()
-
-		if wait <= 0 {
-			wait = time.Millisecond
-		}
-		time.Sleep(wait)
-	}
+	})
+	return entry.limiter
 }

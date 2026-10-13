@@ -1,7 +1,7 @@
 package protocol
 
 import (
-	"sync"
+	"context"
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/serial"
@@ -31,14 +31,17 @@ func (u *User) ToMemoryUser() (*MemoryUser, error) {
 		return nil, err
 	}
 	mu := &MemoryUser{
-		Account:            account,
-		Email:              u.Email,
-		Level:              u.Level,
-		UplinkSpeedLimit:   u.GetUplinkSpeedLimit(),
-		DownlinkSpeedLimit: u.GetDownlinkSpeedLimit(),
+		Account:                 account,
+		Email:                   u.Email,
+		Level:                   u.Level,
+		UplinkSpeedLimit:        u.GetUplinkSpeedLimit(),
+		DownlinkSpeedLimit:      u.GetDownlinkSpeedLimit(),
+		RateLimitGroup:          u.GetRateLimitGroup(),
+		DownlinkGroupSpeedLimit: u.GetDownlinkGroupSpeedLimit(),
 	}
-	mu.uplinkLimiter = globalLimiterRegistry.Get(mu.Email, "uplink", mu.UplinkSpeedLimit)
-	mu.downlinkLimiter = globalLimiterRegistry.Get(mu.Email, "downlink", mu.DownlinkSpeedLimit)
+	globalLimiterRegistry.Update(mu.limiterKey(), "uplink", mu.UplinkSpeedLimit)
+	globalLimiterRegistry.Update(mu.limiterKey(), "downlink", mu.DownlinkSpeedLimit)
+	globalLimiterRegistry.Update(mu.RateLimitGroup, "group-downlink", mu.DownlinkGroupSpeedLimit)
 	return mu, nil
 }
 
@@ -47,48 +50,57 @@ func ToProtoUser(mu *MemoryUser) *User {
 		return nil
 	}
 	return &User{
-		Account:            serial.ToTypedMessage(mu.Account.ToProto()),
-		Email:              mu.Email,
-		Level:              mu.Level,
-		UplinkSpeedLimit:   mu.UplinkSpeedLimit,
-		DownlinkSpeedLimit: mu.DownlinkSpeedLimit,
+		Account:                 serial.ToTypedMessage(mu.Account.ToProto()),
+		Email:                   mu.Email,
+		Level:                   mu.Level,
+		UplinkSpeedLimit:        mu.UplinkSpeedLimit,
+		DownlinkSpeedLimit:      mu.DownlinkSpeedLimit,
+		RateLimitGroup:          mu.RateLimitGroup,
+		DownlinkGroupSpeedLimit: mu.DownlinkGroupSpeedLimit,
 	}
 }
 
 // MemoryUser is a parsed form of User, to reduce number of parsing of Account proto.
 type MemoryUser struct {
 	// Account is the parsed account of the protocol.
-	Account Account
-	Email   string
-	Level   uint32
+	Account            Account
+	Email              string
+	Level              uint32
 	UplinkSpeedLimit   uint64
 	DownlinkSpeedLimit uint64
 
-	limiterMu       sync.Mutex
-	uplinkLimiter   *RateLimiter
-	downlinkLimiter *RateLimiter
+	RateLimitGroup          string
+	DownlinkGroupSpeedLimit uint64
 }
 
-func (u *MemoryUser) GetUplinkLimiter() *RateLimiter {
+func (u *MemoryUser) GetUplinkLimiter(ctx context.Context) *RateLimiter {
 	if u == nil {
 		return nil
 	}
-	u.limiterMu.Lock()
-	defer u.limiterMu.Unlock()
-	if u.uplinkLimiter == nil {
-		u.uplinkLimiter = globalLimiterRegistry.Get(u.Email, "uplink", u.UplinkSpeedLimit)
-	}
-	return u.uplinkLimiter
+	return globalLimiterRegistry.Acquire(ctx, u.limiterKey(), "uplink", u.UplinkSpeedLimit)
 }
 
-func (u *MemoryUser) GetDownlinkLimiter() *RateLimiter {
+func (u *MemoryUser) GetDownlinkLimiter(ctx context.Context) *RateLimiter {
 	if u == nil {
 		return nil
 	}
-	u.limiterMu.Lock()
-	defer u.limiterMu.Unlock()
-	if u.downlinkLimiter == nil {
-		u.downlinkLimiter = globalLimiterRegistry.Get(u.Email, "downlink", u.DownlinkSpeedLimit)
+	return globalLimiterRegistry.Acquire(ctx, u.limiterKey(), "downlink", u.DownlinkSpeedLimit)
+}
+
+func (u *MemoryUser) GetDownlinkGroupLimiter(ctx context.Context) *RateLimiter {
+	if u == nil || u.RateLimitGroup == "" {
+		return nil
 	}
-	return u.downlinkLimiter
+	return globalLimiterRegistry.Acquire(ctx, u.RateLimitGroup, "group-downlink", u.DownlinkGroupSpeedLimit)
+}
+
+func (u *MemoryUser) HasRateLimits() bool {
+	return u != nil && (u.UplinkSpeedLimit > 0 || u.DownlinkSpeedLimit > 0 || u.DownlinkGroupSpeedLimit > 0)
+}
+
+func (u *MemoryUser) limiterKey() string {
+	if u.RateLimitGroup == "" {
+		return u.Email
+	}
+	return u.RateLimitGroup + "\x00" + u.Email
 }

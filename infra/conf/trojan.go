@@ -25,6 +25,7 @@ type TrojanServerTarget struct {
 	Email    string   `json:"email"`
 	Password string   `json:"password"`
 	Flow     string   `json:"flow"`
+	RateLimitConfig
 }
 
 // TrojanClientConfig is configuration of trojan servers
@@ -36,21 +37,26 @@ type TrojanClientConfig struct {
 	Password string                `json:"password"`
 	Flow     string                `json:"flow"`
 	Servers  []*TrojanServerTarget `json:"servers"`
+	RateLimitConfig
 }
 
 // Build implements Buildable
 func (c *TrojanClientConfig) Build() (proto.Message, error) {
 	errors.PrintNonRemovalDeprecatedFeatureWarning("Trojan (with no Flow, etc.)", "VLESS with Flow & Seed")
 
+	if len(c.Servers) > 0 && c.RateLimitConfig.HasLimits() {
+		return nil, errors.New("trojan servers: set rate limit fields on the target")
+	}
 	if c.Address != nil {
 		c.Servers = []*TrojanServerTarget{
 			{
-				Address:  c.Address,
-				Port:     c.Port,
-				Level:    c.Level,
-				Email:    c.Email,
-				Password: c.Password,
-				Flow:     c.Flow,
+				Address:         c.Address,
+				Port:            c.Port,
+				Level:           c.Level,
+				Email:           c.Email,
+				Password:        c.Password,
+				Flow:            c.Flow,
+				RateLimitConfig: c.RateLimitConfig,
 			},
 		}
 	}
@@ -74,16 +80,18 @@ func (c *TrojanClientConfig) Build() (proto.Message, error) {
 			return nil, errors.PrintRemovedFeatureError(`Flow for Trojan`, ``)
 		}
 
+		user := &protocol.User{
+			Level: uint32(rec.Level),
+			Email: rec.Email,
+			Account: serial.ToTypedMessage(&trojan.Account{
+				Password: rec.Password,
+			}),
+		}
+		rec.RateLimitConfig.Apply(user)
 		config.Server = &protocol.ServerEndpoint{
 			Address: rec.Address.Build(),
 			Port:    uint32(rec.Port),
-			User: &protocol.User{
-				Level: uint32(rec.Level),
-				Email: rec.Email,
-				Account: serial.ToTypedMessage(&trojan.Account{
-					Password: rec.Password,
-				}),
-			},
+			User:    user,
 		}
 
 		break
@@ -108,6 +116,7 @@ type TrojanUserConfig struct {
 	Level    byte   `json:"level"`
 	Email    string `json:"email"`
 	Flow     string `json:"flow"`
+	RateLimitConfig
 }
 
 // TrojanServerConfig is Inbound configuration
@@ -142,6 +151,7 @@ func (c *TrojanServerConfig) Build() (proto.Message, error) {
 				Password: rawUser.Password,
 			}),
 		}
+		rawUser.RateLimitConfig.Apply(config.Users[idx])
 		return nil
 	}
 	if err := task.ParallelForN(len(c.Users), processClient); err != nil {
