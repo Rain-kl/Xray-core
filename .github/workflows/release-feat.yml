@@ -1,0 +1,357 @@
+name: "[FEAT] Build and Release"
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Target release tag (e.g. v26.10.10-audit.1)'
+        required: false
+        default: 'v26.10.10-audit.1'
+  release:
+    types: [published]
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  check-assets:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+    permissions:
+      contents: read
+    steps:
+      - name: Restore Geodat Cache
+        uses: actions/cache/restore@v6
+        with:
+          path: resources
+          key: xray-geodat-
+
+      - name: Restore Wintun Cache
+        uses: actions/cache/restore@v6
+        with:
+          path: resources
+          key: xray-wintun-
+
+      - name: Check and Download Missing Assets
+        id: fetch-assets
+        run: |
+          mkdir -p resources
+          GEODAT_UPDATED=false
+          WINTUN_UPDATED=false
+
+          for FILE_NAME in geoip.dat geosite.dat; do
+            echo "Checking ${FILE_NAME}..."
+            if [ ! -s "./resources/${FILE_NAME}" ]; then
+              echo "Downloading ${FILE_NAME}..."
+              curl -sSL "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/${FILE_NAME}" -o "./resources/${FILE_NAME}"
+              GEODAT_UPDATED=true
+            fi
+          done
+
+          mkdir -p resources/wintun/bin/amd64 resources/wintun/bin/x86 resources/wintun/bin/arm64
+          WINTUN_MISSING=false
+          for ARCH in amd64 x86 arm64; do
+            if [ ! -s "./resources/wintun/bin/${ARCH}/wintun.dll" ]; then
+              WINTUN_MISSING=true
+              break
+            fi
+          done
+          if [ ! -s "./resources/wintun/LICENSE.txt" ]; then
+            WINTUN_MISSING=true
+          fi
+
+          if [ "$WINTUN_MISSING" = "true" ]; then
+            echo "Downloading wintun..."
+            curl -sSL "https://www.wintun.net/builds/wintun-0.14.1.zip" -o "wintun.zip"
+            unzip -q -o wintun.zip -d resources/
+            rm -f wintun.zip
+            WINTUN_UPDATED=true
+          fi
+
+          echo "geodat_updated=${GEODAT_UPDATED}" >> $GITHUB_OUTPUT
+          echo "wintun_updated=${WINTUN_UPDATED}" >> $GITHUB_OUTPUT
+
+      - name: Save Geodat Cache
+        if: steps.fetch-assets.outputs.geodat_updated == 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: resources
+          key: xray-geodat-${{ github.sha }}-${{ github.run_number }}
+
+      - name: Save Wintun Cache
+        if: steps.fetch-assets.outputs.wintun_updated == 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: resources
+          key: xray-wintun-${{ github.sha }}-${{ github.run_number }}
+
+      - name: Upload Shared Resources
+        uses: actions/upload-artifact@v7
+        with:
+          name: shared-resources
+          path: resources/
+          retention-days: 1
+
+  build:
+    needs: check-assets
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        # Include amd64 on all platforms.
+        goos: [windows, freebsd, openbsd, linux, darwin]
+        goarch: [amd64, 386]
+        patch-assetname: [""]
+        exclude:
+          # Exclude i386 on darwin
+          - goarch: 386
+            goos: darwin
+        include:
+          # BEGIN MacOS ARM64
+          - goos: darwin
+            goarch: arm64
+          # END MacOS ARM64
+          # BEGIN Linux ARM 5 6 7
+          - goos: linux
+            goarch: arm
+            goarm: 7
+          - goos: linux
+            goarch: arm
+            goarm: 6
+          - goos: linux
+            goarch: arm
+            goarm: 5
+          # END Linux ARM 5 6 7
+          # BEGIN Android ARM 8
+          - goos: android
+            goarch: arm64
+          # END Android ARM 8
+          # BEGIN Android AMD64
+          - goos: android
+            goarch: amd64
+            patch-assetname: android-amd64
+          # END Android AMD64
+          # Windows ARM
+          - goos: windows
+            goarch: arm64
+          # BEGIN Other architectures
+          # BEGIN riscv64 & ARM64 & LOONG64
+          - goos: linux
+            goarch: arm64
+          - goos: linux
+            goarch: riscv64
+          - goos: linux
+            goarch: loong64
+          # END riscv64 & ARM64 & LOONG64
+          # BEGIN MIPS
+          - goos: linux
+            goarch: mips64
+          - goos: linux
+            goarch: mips64le
+          - goos: linux
+            goarch: mipsle
+          - goos: linux
+            goarch: mips
+          # END MIPS
+          # BEGIN PPC
+          - goos: linux
+            goarch: ppc64
+          - goos: linux
+            goarch: ppc64le
+          # END PPC
+          # BEGIN FreeBSD ARM
+          - goos: freebsd
+            goarch: arm64
+          - goos: freebsd
+            goarch: arm
+            goarm: 7
+          # END FreeBSD ARM
+          # BEGIN S390X
+          - goos: linux
+            goarch: s390x
+          # END S390X
+          # END Other architectures
+          # BEGIN OPENBSD ARM
+          - goos: openbsd
+            goarch: arm64
+          - goos: openbsd
+            goarch: arm
+            goarm: 7
+          # END OPENBSD ARM
+      fail-fast: false
+
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+    env:
+      GOOS: ${{ matrix.goos }}
+      GOARCH: ${{ matrix.goarch }}
+      GOARM: ${{ matrix.goarm }}
+      CGO_ENABLED: 0
+    steps:
+      - name: Checkout codebase
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up NDK
+        if: matrix.goos == 'android'
+        run: |
+          wget -qO android-ndk.zip https://dl.google.com/android/repository/android-ndk-r28b-linux.zip
+          unzip android-ndk.zip
+          rm android-ndk.zip
+          declare -A arches=(
+            ["amd64"]="x86_64-linux-android24-clang"
+            ["arm64"]="aarch64-linux-android24-clang"
+          )
+          echo CC="$(realpath android-ndk-*/toolchains/llvm/prebuilt/linux-x86_64/bin)/${arches[${{ matrix.goarch }}]}" >> $GITHUB_ENV
+          echo CGO_ENABLED=1 >> $GITHUB_ENV
+
+      - name: Show workflow information
+        run: |
+          _NAME=${{ matrix.patch-assetname }}
+          [ -n "$_NAME" ] || _NAME=$(jq ".[\"$GOOS-$GOARCH$GOARM$GOMIPS\"].friendlyName" -r < .github/build/friendly-filenames.json)
+          echo "GOOS: $GOOS, GOARCH: $GOARCH, GOARM: $GOARM, GOMIPS: $GOMIPS, RELEASE_NAME: $_NAME"
+          echo "ASSET_NAME=$_NAME" >> $GITHUB_ENV
+
+      - name: Determine release tag
+        id: release-tag
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+          elif [ -n "${{ inputs.tag_name }}" ]; then
+            TAG="${{ inputs.tag_name }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            TAG="v26.10.10-audit.1"
+          fi
+          echo "RELEASE_TAG=${TAG}" >> $GITHUB_ENV
+          echo "release_tag=${TAG}" >> $GITHUB_OUTPUT
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: Get project dependencies
+        run: go mod download
+
+      - name: Build Xray
+        run: |
+          mkdir -p build_assets
+          COMMID=$(git describe --tags --always --dirty)
+          if [[ ${GOOS} == 'windows' ]]; then
+            echo 'Building Xray for Windows...'
+            go build -o build_assets/xray.exe -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
+            # The line below is for without running conhost.exe version. Commented for not being used. Provided for reference.
+            # go build -o build_assets/wxray.exe -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-H windowsgui -X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
+          elif [[ ${GOOS} == 'android' ]]; then
+            echo 'Building Xray for Android...'
+            go build -o build_assets/xray -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid= -checklinkname=0" -v ./main
+          else
+            echo 'Building Xray...'
+            if [[ ${GOARCH} == 'mips' || ${GOARCH} == 'mipsle' ]]; then
+              go build -o build_assets/xray -trimpath -buildvcs=false -gcflags="-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
+              echo 'Building soft-float Xray for MIPS/MIPSLE 32-bit...'
+              GOMIPS=softfloat go build -o build_assets/xray_softfloat -trimpath -buildvcs=false -gcflags="-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
+            else
+              go build -o build_assets/xray -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
+            fi
+          fi
+
+      - name: Restore Geodat Cache
+        uses: actions/cache/restore@v6
+        with:
+          path: resources
+          key: xray-geodat-
+
+      - name: Restore Wintun Cache
+        if: matrix.goos == 'windows'
+        uses: actions/cache/restore@v6
+        with:
+          path: resources
+          key: xray-wintun-
+
+      - name: Download Shared Resources if Missing
+        if: hashFiles('resources/geoip.dat') == ''
+        uses: actions/download-artifact@v7
+        continue-on-error: true
+        with:
+          name: shared-resources
+          path: resources
+
+      - name: Add additional assets into package
+        run: |
+          mkdir -p build_assets resources
+          for FILE_NAME in geoip.dat geosite.dat; do
+            if [ ! -s "resources/${FILE_NAME}" ]; then
+              echo "Fallback downloading ${FILE_NAME}..."
+              curl -sSL "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/${FILE_NAME}" -o "resources/${FILE_NAME}"
+            fi
+          done
+          cp -f resources/geo* build_assets/
+          if [[ ${GOOS} == 'windows' ]]; then
+            cp .github/build/windows/* build_assets/
+            echo 'Adding Wintun into packages'
+            if [ ! -s "resources/wintun/LICENSE.txt" ]; then
+              echo "Fallback downloading wintun..."
+              curl -sSL "https://www.wintun.net/builds/wintun-0.14.1.zip" -o "wintun.zip"
+              unzip -q -o wintun.zip -d resources/
+              rm -f wintun.zip
+            fi
+            if [[ ${GOARCH} == 'amd64' ]]; then
+              cp -f resources/wintun/bin/amd64/wintun.dll build_assets/
+            fi
+            if [[ ${GOARCH} == '386' ]]; then
+              cp -f resources/wintun/bin/x86/wintun.dll build_assets/
+            fi
+            if [[ ${GOARCH} == 'arm64' ]]; then
+              cp -f resources/wintun/bin/arm64/wintun.dll build_assets/
+            fi
+            cp -f resources/wintun/LICENSE.txt build_assets/LICENSE-Wintun
+          fi
+
+      - name: Copy README.md & LICENSE
+        run: |
+          cp ${GITHUB_WORKSPACE}/README.md ./build_assets/README.md
+          cp ${GITHUB_WORKSPACE}/LICENSE ./build_assets/LICENSE
+
+      - name: Create ZIP archive
+        if: github.event_name == 'release' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          pushd build_assets || exit 1
+          touch -mt $(date +%Y01010000) *
+          zip -9vr ../Xray-${{ env.ASSET_NAME }}.zip .
+          popd || exit 1
+          FILE=./Xray-${{ env.ASSET_NAME }}.zip
+          DGST=$FILE.dgst
+          for METHOD in {"md5","sha1","sha256","sha512"}
+          do
+            openssl dgst -$METHOD $FILE | sed 's/([^)]*)//g' >>$DGST
+          done
+
+      - name: Upload binaries to release
+        uses: svenstaro/upload-release-action@v2
+        if: github.event_name == 'release' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: ./Xray-${{ env.ASSET_NAME }}.zip*
+          tag: ${{ env.RELEASE_TAG }}
+          file_glob: true
+          overwrite: true
+
+      - name: Upload files to Artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: Xray-${{ env.ASSET_NAME }}
+          path: |
+            ./build_assets/*
