@@ -11,4 +11,4 @@
 
 1. `origin` 指向 `Rain-kl/Xray-core`，`upstream` 指向 `XTLS/Xray-core`。在独立分支 `git fetch upstream` 并合并 `upstream/main`，比较 PR #6840 与新增上游代码，解决冲突后更新本文件。
 2. 运行 `go test ./app/dispatcher ./app/log ./common/log ./common/buf ./transport/pipe ./testing/trafficlog`、`go test -race ./app/dispatcher ./transport/pipe`，构建核心并用 TCP、UDP、MUX、Vision 连接核对日志。
-3. 用本 fork 的 Release 发布核心，记录 tag、源 commit、资产校验和；在 3x-ui 的 Docker、安装脚本和发布工作流中同步修改下载地址与版本。先发布核心再发布面板，混合版本时面板应明确区分缺失字节与零字节。
+3. 首个审计版 tag 为 `v26.10.10-audit.1`，指向本 fork 的审计实现。用本 fork 的 Release 发布核心，记录 tag、源 commit、资产校验和；在 3x-ui 的 Docker、安装脚本和发布工作流中同步修改下载地址与版本。先发布核心再发布面板，混合版本时面板应明确区分缺失字节与零字节。
