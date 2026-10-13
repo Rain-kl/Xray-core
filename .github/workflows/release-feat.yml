@@ -97,8 +97,22 @@ jobs:
           path: resources/
           retention-days: 1
 
-  build:
+  validate:
     needs: check-assets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      - name: Verify audit, sniffed domains and native rate limits
+        run: go test ./common/log ./common/protocol ./app/dispatcher ./testing/trafficlog -count=1
+      - name: Verify concurrent accounting and cancellation
+        run: go test -race ./common/log ./common/protocol ./app/dispatcher -count=1
+
+  build:
+    needs: [check-assets, validate]
     permissions:
       contents: write
     strategy:
