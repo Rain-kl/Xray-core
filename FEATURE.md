@@ -18,4 +18,4 @@
 - **价值与场景**：允许禁用 ML-KEM 的 Mihomo 及其他 TLS 客户端使用 REALITY 入站，避免其仅发送 X25519 key share 时被误判为无效握手并回落到伪装目标。
 - **功能描述**：上游 `github.com/xtls/reality` 在提交 `8cdf7bf`（2026-09-08）后要求 `X25519MLKEM768` key share 必须存在且先于独立 `X25519`。本 fork 在 `third_party/reality` 固定该上游模块版本并替换校验：接受独立 X25519、混合组或二者任意顺序；重复的有效组仍拒绝。REALITY 认证继续使用 X25519 共享密钥，不启用 ML-KEM。
 - **上游检查与维护**：检查了 XTLS/REALITY 当前 issue/PR；PR #41 仅拆分 ClientHello 验证，PR #40 为私钥性能优化，均不修复兼容性。引入规则的 REALITY 提交引用 Xray-core #6714；其中讨论解释了该规则用于回落处理缺少 hybrid share 的 ClientHello。上游同步时对照 `third_party/reality/tls.go` 的 `keyShares` 验证，并保留重复 key share 检查及 X25519-only 接入路径。
-- **取舍与验证**：该兼容模式不提供后量子密钥交换，满足不需要 ML-KEM 的部署需求。核心版本升级为 `v26.10.10-audit.2`；验证须覆盖 X25519-only、hybrid-only、两组任意顺序和重复组握手，再运行 REALITY 与 Xray 核心测试。
+- **取舍与验证**：该兼容模式不提供后量子密钥交换，满足不需要 ML-KEM 的部署需求。核心版本使用 `v26.10.10-feat.1`（定制构建标记统一采用 `-feat.x` 后缀）；验证须覆盖 X25519-only、hybrid-only、两组任意顺序和重复组握手，再运行 REALITY 与 Xray 核心测试。
