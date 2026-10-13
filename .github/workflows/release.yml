@@ -203,7 +203,7 @@ jobs:
 
       - name: Set feature version suffix
         run: |
-          SUFFIX='-feat.2'
+          SUFFIX='-feat.3'
           if [[ "${GITHUB_REF_NAME}" == v26.10.10-feat.* ]]; then
             SUFFIX="${GITHUB_REF_NAME#v26.10.10}"
           fi

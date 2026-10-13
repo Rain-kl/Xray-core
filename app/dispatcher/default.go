@@ -348,6 +348,10 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 			result, err := sniffer(ctx, cReader, sniffingRequest.MetadataOnly, destination.Network)
 			if err == nil {
 				content.Protocol = result.Protocol()
+				// FORK(sniffed-audit-domains): Observe domains even when destination override is suppressed.
+				if access := log.AccessMessageFromContext(ctx); access != nil {
+					access.SniffedDomain = result.Domain()
+				}
 			}
 			if err == nil && d.shouldOverride(ctx, result, sniffingRequest, destination) {
 				domain := result.Domain()
@@ -408,6 +412,10 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 		result, err := sniffer(ctx, cReader, sniffingRequest.MetadataOnly, destination.Network)
 		if err == nil {
 			content.Protocol = result.Protocol()
+			// FORK(sniffed-audit-domains): Observe domains even when destination override is suppressed.
+			if access := log.AccessMessageFromContext(ctx); access != nil {
+				access.SniffedDomain = result.Domain()
+			}
 		}
 		if err == nil && d.shouldOverride(ctx, result, sniffingRequest, destination) {
 			domain := result.Domain()

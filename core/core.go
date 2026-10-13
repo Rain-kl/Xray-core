@@ -26,7 +26,7 @@ var (
 var (
 	build = "Custom"
 	// FORK(native-rate-limits): Identify binaries that can enforce the panel rate-limit wire fields.
-	featureVersion = "-feat.2"
+	featureVersion = "-feat.3"
 	codename       = "Xray, Penetrates Everything."
 	intro          = "A unified platform for anti-censorship."
 )

@@ -285,7 +285,7 @@ type accessRecord struct {
 	uplink, downlink int64
 }
 
-var accessRecordRe = regexp.MustCompile(`from (\S+) accepted (\S+)(?: \[(\S+)\])? uplink=(\d+) downlink=(\d+)`)
+var accessRecordRe = regexp.MustCompile(`from (\S+) accepted (\S+)(?: \[(\S+)\])?(?: sniffed_domain=\S+)? uplink=(\d+) downlink=(\d+)`)
 
 func readAccessRecords(path string) []accessRecord {
 	data, err := os.ReadFile(path)

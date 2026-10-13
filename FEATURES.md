@@ -7,3 +7,9 @@
 - **Files:** See the implementation and support details in [FEATURE.md](FEATURE.md), and the behavior contract in [the specification](docs/specs/native-rate-limits.md). Core implementation spans `common/protocol`, `infra/conf`, `app/dispatcher`, and protocol adapters; the panel integration is maintained in Rain-kl/3x-ui.
 - **Upstream fork markers:** Product code uses `FORK(native-rate-limits)` / `FORK-BEGIN(native-rate-limits)` markers where upstream files are modified.
 - **Provenance:** Upstream [PR #6050](https://github.com/XTLS/Xray-core/pull/6050), original commit `da56e92`, cherry-picked as `4e99a70`; fork corrections and verification are documented in the [Agent Note](.agents/notes/native-rate-limits.md).
+
+## Sniffed domains in audit (sniffed-audit-domains)
+
+- Preserve original IP destinations and export observed HTTP/TLS/QUIC/FakeDNS domains separately for website audit, including route-only sniffing.
+- Core integration: common/log/access.go and both app/dispatcher dispatch paths; panel: internal/audit/spool.go, audit ingestion and audit event display.
+- Design: [specification](docs/specs/sniffed-audit-domains.md). Implementation decision: [Agent Note](.agents/notes/sniffed-audit-domains.md). Upstream markers: FORK(sniffed-audit-domains). Legacy logs remain compatible; no retroactive IP-to-domain inference.

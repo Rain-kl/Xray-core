@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Target release tag (e.g. v26.10.10-feat.2)'
+        description: 'Target release tag (e.g. v26.10.10-feat.3)'
         required: false
-        default: 'v26.10.10-feat.2'
+        default: 'v26.10.10-feat.3'
   push:
     tags:
       - 'v*'
@@ -228,7 +228,7 @@ jobs:
           elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
             TAG="${GITHUB_REF#refs/tags/}"
           else
-            TAG="v26.10.10-feat.2"
+            TAG="v26.10.10-feat.3"
           fi
           echo "RELEASE_TAG=${TAG}" >> $GITHUB_ENV
           echo "release_tag=${TAG}" >> $GITHUB_OUTPUT
@@ -244,7 +244,7 @@ jobs:
 
       - name: Set feature version suffix
         run: |
-          SUFFIX='-feat.2'
+          SUFFIX='-feat.3'
           if [[ "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-feat\.[0-9]+)$ ]]; then
             SUFFIX="${BASH_REMATCH[1]}"
           fi

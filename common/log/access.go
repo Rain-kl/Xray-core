@@ -2,6 +2,7 @@ package log
 
 import (
 	"context"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -28,6 +29,8 @@ type AccessMessage struct {
 	Reason interface{}
 	Email  string
 	Detour string
+	// FORK(sniffed-audit-domains): Keep observed domains separate from original targets.
+	SniffedDomain string
 	// Uplink is the number of bytes sent from the client to the target. It is
 	// the total of the connection for records written after the connection
 	// ends, and 0 for records written at dispatch or rejection time.
@@ -62,6 +65,11 @@ func (m *AccessMessage) String() string {
 		builder.WriteString(m.Email)
 	}
 
+	// FORK(sniffed-audit-domains): Escape untrusted handshake metadata into one log token.
+	if m.SniffedDomain != "" {
+		builder.WriteString(" sniffed_domain=")
+		builder.WriteString(url.QueryEscape(m.SniffedDomain))
+	}
 	builder.WriteString(" uplink=")
 	builder.WriteString(strconv.FormatInt(m.Uplink, 10))
 	builder.WriteString(" downlink=")
