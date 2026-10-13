@@ -22,7 +22,9 @@
 
 ## 认证用户双向限速与共享下行组
 
+- **设计与实现索引**：[行为规格](docs/specs/native-rate-limits.md)；[Agent Note](.agents/notes/native-rate-limits.md)。
+
 - **来源与价值**：基于上游 PR [#6050](https://github.com/XTLS/Xray-core/pull/6050)（原始提交 `da56e92`，本仓库 cherry-pick `4e99a70`），为面板按认证用户限制上传/下载速率，并为同一入站用户组设置共享下行上限。
 - **配置与行为**：`common.protocol.User` 新增 `rate_limit_group` 与 `downlink_group_speed_limit`，速率以字节/秒传递。用户独立限速和组限速使用共享令牌桶；组键由面板按入站作用域生成，因此同一客户端在不同入站不会互相争用限额。限速发生在应用层，基于实际传输字节，不依赖 IPv4/IPv6 地址或 NAT 映射。面板限速变更会重启现有连接后生效。
 - **实现修正**：cherry-pick 后修正等待中的取消处理，按不超过 64 KiB 的数据块等待令牌，并让受限连接跳过 splice 快速路径，避免快速路径绕过限额。限速器注册表会移除不再使用的用户与组条目，避免动态用户变更后持续积累状态。
-- **发布与维护**：默认版本后缀为 `-feat.2`；Release 工作流从 `v26.10.10-feat.*` 标签注入实际后缀。同步上游或修改流量转发时，检查取消是否及时传播、受限连接是否绕过 splice、用户增删后的限速器回收，以及每个入站组是否保持独立作用域。单用户 Shadowsocks 2022、Shadowsocks 2022 relay 与匿名 SOCKS/HTTP 不具备认证用户限速配置，配置层会明确拒绝这些限额。
+- **发布与维护**：默认版本后缀为 `-feat.2`；`release-feat.yml` 从 `v*-feat.*` 标签注入实际后缀。同步上游或修改流量转发时，检查取消是否及时传播、受限连接是否绕过 splice、用户增删后的限速器回收，以及每个入站组是否保持独立作用域。单用户 Shadowsocks 2022、Shadowsocks 2022 relay 与匿名 SOCKS/HTTP 不具备认证用户限速配置，配置层会明确拒绝这些限额。

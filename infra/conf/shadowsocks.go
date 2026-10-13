@@ -34,6 +34,7 @@ type ShadowsocksUserConfig struct {
 	Email    string   `json:"email"`
 	Address  *Address `json:"address"`
 	Port     uint16   `json:"port"`
+	// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 	RateLimitConfig
 }
 
@@ -45,6 +46,7 @@ type ShadowsocksServerConfig struct {
 	Users       []*ShadowsocksUserConfig `json:"users"`
 	Clients     []*ShadowsocksUserConfig `json:"clients"`
 	NetworkList *NetworkList             `json:"network"`
+	// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 	RateLimitConfig
 }
 
@@ -54,6 +56,7 @@ func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 	if v.Clients != nil {
 		v.Users = v.Clients
 	}
+	// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 	if len(v.Users) > 0 && v.RateLimitConfig.HasLimits() {
 		return nil, errors.New("shadowsocks multi-user: use per-user rate limit fields")
 	}
@@ -86,6 +89,7 @@ func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 					Level:   uint32(user.Level),
 					Account: serial.ToTypedMessage(account),
 				}
+				// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 				user.RateLimitConfig.Apply(config.Users[idx])
 				return nil
 			}
@@ -109,6 +113,7 @@ func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 			Level:   uint32(v.Level),
 			Account: serial.ToTypedMessage(account),
 		}
+		// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 		v.RateLimitConfig.Apply(user)
 		config.Users = append(config.Users, user)
 	}
@@ -119,6 +124,7 @@ func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 func buildShadowsocks2022(v *ShadowsocksServerConfig) (proto.Message, error) {
 	v.Cipher = strings.ToLower(v.Cipher)
 	if len(v.Users) == 0 {
+		// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 		if v.RateLimitConfig.HasLimits() {
 			return nil, errors.New("shadowsocks 2022 (single-user): rate limits are unsupported")
 		}
@@ -157,6 +163,7 @@ func buildShadowsocks2022(v *ShadowsocksServerConfig) (proto.Message, error) {
 				Level:   uint32(user.Level),
 				Account: serial.ToTypedMessage(account),
 			}
+			// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 			user.RateLimitConfig.Apply(config.Users[idx])
 			return nil
 		}
@@ -171,6 +178,7 @@ func buildShadowsocks2022(v *ShadowsocksServerConfig) (proto.Message, error) {
 	config.Key = v.Password
 	config.Network = v.NetworkList.Build()
 	for _, user := range v.Users {
+		// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 		if user.RateLimitConfig.HasLimits() {
 			return nil, errors.New("shadowsocks 2022 (relay): rate limits are unsupported")
 		}
@@ -198,6 +206,7 @@ type ShadowsocksServerTarget struct {
 	Email    string   `json:"email"`
 	Cipher   string   `json:"method"`
 	Password string   `json:"password"`
+	// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 	RateLimitConfig
 }
 
@@ -209,12 +218,14 @@ type ShadowsocksClientConfig struct {
 	Cipher   string                     `json:"method"`
 	Password string                     `json:"password"`
 	Servers  []*ShadowsocksServerTarget `json:"servers"`
+	// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 	RateLimitConfig
 }
 
 func (v *ShadowsocksClientConfig) Build() (proto.Message, error) {
 	errors.PrintNonRemovalDeprecatedFeatureWarning("Shadowsocks (with no Forward Secrecy, etc.)", "VLESS Encryption")
 
+	// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 	if len(v.Servers) > 0 && v.RateLimitConfig.HasLimits() {
 		return nil, errors.New("shadowsocks servers: set rate limit fields on the target")
 	}
@@ -247,6 +258,7 @@ func (v *ShadowsocksClientConfig) Build() (proto.Message, error) {
 	}
 
 	if _, err := shadowsocks_2022.GetCipherMethod(server.Cipher); err == nil {
+		// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 		if server.RateLimitConfig.HasLimits() {
 			return nil, errors.New("shadowsocks 2022 client: rate limits are unsupported")
 		}
@@ -270,6 +282,7 @@ func (v *ShadowsocksClientConfig) Build() (proto.Message, error) {
 		Email:   server.Email,
 		Account: serial.ToTypedMessage(account),
 	}
+	// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 	server.RateLimitConfig.Apply(user)
 	ss := &protocol.ServerEndpoint{
 		Address: server.Address.Build(),

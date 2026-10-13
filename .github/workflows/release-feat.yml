@@ -4,11 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Target release tag (e.g. v26.10.10-audit.1)'
+        description: 'Target release tag (e.g. v26.10.10-feat.2)'
         required: false
-        default: 'v26.10.10-audit.1'
-  release:
-    types: [published]
+        default: 'v26.10.10-feat.2'
   push:
     tags:
       - 'v*'
@@ -230,7 +228,7 @@ jobs:
           elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
             TAG="${GITHUB_REF#refs/tags/}"
           else
-            TAG="v26.10.10-audit.1"
+            TAG="v26.10.10-feat.2"
           fi
           echo "RELEASE_TAG=${TAG}" >> $GITHUB_ENV
           echo "release_tag=${TAG}" >> $GITHUB_OUTPUT
@@ -244,26 +242,34 @@ jobs:
       - name: Get project dependencies
         run: go mod download
 
+      - name: Set feature version suffix
+        run: |
+          SUFFIX='-feat.2'
+          if [[ "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-feat\.[0-9]+)$ ]]; then
+            SUFFIX="${BASH_REMATCH[1]}"
+          fi
+          echo "FEATURE_VERSION_SUFFIX=${SUFFIX}" >> "$GITHUB_ENV"
+
       - name: Build Xray
         run: |
           mkdir -p build_assets
           COMMID=$(git describe --tags --always --dirty)
           if [[ ${GOOS} == 'windows' ]]; then
             echo 'Building Xray for Windows...'
-            go build -o build_assets/xray.exe -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
+            go build -o build_assets/xray.exe -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -X github.com/xtls/xray-core/core.featureVersion=${FEATURE_VERSION_SUFFIX} -s -w -buildid=" -v ./main
             # The line below is for without running conhost.exe version. Commented for not being used. Provided for reference.
-            # go build -o build_assets/wxray.exe -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-H windowsgui -X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
+            # go build -o build_assets/wxray.exe -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-H windowsgui -X github.com/xtls/xray-core/core.build=${COMMID} -X github.com/xtls/xray-core/core.featureVersion=${FEATURE_VERSION_SUFFIX} -s -w -buildid=" -v ./main
           elif [[ ${GOOS} == 'android' ]]; then
             echo 'Building Xray for Android...'
-            go build -o build_assets/xray -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid= -checklinkname=0" -v ./main
+            go build -o build_assets/xray -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -X github.com/xtls/xray-core/core.featureVersion=${FEATURE_VERSION_SUFFIX} -s -w -buildid= -checklinkname=0" -v ./main
           else
             echo 'Building Xray...'
             if [[ ${GOARCH} == 'mips' || ${GOARCH} == 'mipsle' ]]; then
-              go build -o build_assets/xray -trimpath -buildvcs=false -gcflags="-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
+              go build -o build_assets/xray -trimpath -buildvcs=false -gcflags="-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -X github.com/xtls/xray-core/core.featureVersion=${FEATURE_VERSION_SUFFIX} -s -w -buildid=" -v ./main
               echo 'Building soft-float Xray for MIPS/MIPSLE 32-bit...'
-              GOMIPS=softfloat go build -o build_assets/xray_softfloat -trimpath -buildvcs=false -gcflags="-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
+              GOMIPS=softfloat go build -o build_assets/xray_softfloat -trimpath -buildvcs=false -gcflags="-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -X github.com/xtls/xray-core/core.featureVersion=${FEATURE_VERSION_SUFFIX} -s -w -buildid=" -v ./main
             else
-              go build -o build_assets/xray -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
+              go build -o build_assets/xray -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -X github.com/xtls/xray-core/core.featureVersion=${FEATURE_VERSION_SUFFIX} -s -w -buildid=" -v ./main
             fi
           fi
 

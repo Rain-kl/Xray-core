@@ -34,6 +34,7 @@ type HysteriaUserConfig struct {
 	Auth  string `json:"auth"`
 	Level uint32 `json:"level"`
 	Email string `json:"email"`
+	// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 	RateLimitConfig
 }
 
@@ -65,6 +66,7 @@ func (c *HysteriaServerConfig) Build() (proto.Message, error) {
 				Level:   user.Level,
 				Account: serial.ToTypedMessage(acc),
 			}
+			// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 			user.RateLimitConfig.Apply(config.Users[idx])
 			return nil
 		}

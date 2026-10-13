@@ -7,6 +7,7 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 const rateLimitBurst = 64 * 1024
 
 type RateLimiter struct {

@@ -82,8 +82,9 @@ func (v *Validator) Get(auth string) (user *protocol.MemoryUser) {
 			VR := net.PortFromBytes(id[6:8])
 			if user.Account.(*MemoryAccount).VR != VR {
 				user = &protocol.MemoryUser{
-					Email:                   user.Email,
-					Level:                   user.Level,
+					Email: user.Email,
+					Level: user.Level,
+					// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 					UplinkSpeedLimit:        user.UplinkSpeedLimit,
 					DownlinkSpeedLimit:      user.DownlinkSpeedLimit,
 					RateLimitGroup:          user.RateLimitGroup,

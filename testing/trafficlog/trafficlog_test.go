@@ -552,13 +552,21 @@ func TestHalfClose(t *testing.T) {
 // produces exactly one record, after its copies finished.
 func TestAbnormalClose(t *testing.T) {
 	const payloadSize = 128 * 1024
-	_, dest := startCountingTarget(t, payloadSize, nil)
+	target, dest := startCountingTarget(t, payloadSize, nil)
 	accessLog := accessLogPath(t, "abnormal-access.log")
 	port := pickPort(t)
 	startInstance(t, "abnormal-server", plainServerConfig(t, port, accessLog))
 
 	conn := httpConnect(t, port, dest)
 	writeAll(t, conn, randomPayload(payloadSize))
+	deadline := time.Now().Add(5 * time.Second)
+	for target.read.Load() < payloadSize && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got := target.read.Load(); got < payloadSize {
+		conn.Close()
+		t.Fatalf("target received %d uplink bytes, want at least %d before abnormal close", got, payloadSize)
+	}
 	readAll(t, conn, 1024) // stop reading mid-response
 	conn.Close()
 

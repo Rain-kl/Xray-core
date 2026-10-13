@@ -25,6 +25,7 @@ func (u *User) GetTypedAccount() (Account, error) {
 	return nil, errors.New("Unknown account type: ", u.Account.Type)
 }
 
+// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 func (u *User) ToMemoryUser() (*MemoryUser, error) {
 	account, err := u.GetTypedAccount()
 	if err != nil {
@@ -45,6 +46,7 @@ func (u *User) ToMemoryUser() (*MemoryUser, error) {
 	return mu, nil
 }
 
+// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 func ToProtoUser(mu *MemoryUser) *User {
 	if mu == nil {
 		return nil
@@ -63,9 +65,10 @@ func ToProtoUser(mu *MemoryUser) *User {
 // MemoryUser is a parsed form of User, to reduce number of parsing of Account proto.
 type MemoryUser struct {
 	// Account is the parsed account of the protocol.
-	Account            Account
-	Email              string
-	Level              uint32
+	Account Account
+	Email   string
+	Level   uint32
+	// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 	UplinkSpeedLimit   uint64
 	DownlinkSpeedLimit uint64
 
@@ -73,6 +76,7 @@ type MemoryUser struct {
 	DownlinkGroupSpeedLimit uint64
 }
 
+// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 func (u *MemoryUser) GetUplinkLimiter(ctx context.Context) *RateLimiter {
 	if u == nil {
 		return nil

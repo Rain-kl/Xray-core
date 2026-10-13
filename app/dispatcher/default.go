@@ -167,6 +167,7 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 
 	var uplink, downlink stats.Counter
 	if user != nil && len(user.Email) > 0 {
+		// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 		if limiter := user.GetUplinkLimiter(ctx); limiter != nil {
 			inboundLink.Writer = newRateLimitedWriter(ctx, inboundLink.Writer, limiter)
 		}
@@ -258,6 +259,7 @@ func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager st
 	}
 
 	if user != nil && len(user.Email) > 0 {
+		// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 		if limiter := user.GetUplinkLimiter(ctx); limiter != nil {
 			link.Reader = newRateLimitedReader(ctx, link.Reader, limiter)
 		}

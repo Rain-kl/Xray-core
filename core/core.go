@@ -24,7 +24,8 @@ var (
 )
 
 var (
-	build          = "Custom"
+	build = "Custom"
+	// FORK(native-rate-limits): Identify binaries that can enforce the panel rate-limit wire fields.
 	featureVersion = "-feat.2"
 	codename       = "Xray, Penetrates Everything."
 	intro          = "A unified platform for anti-censorship."
@@ -61,6 +62,7 @@ func init() {
 // Version returns Xray's version as a string, in the form of "x.y.z" where x, y and z are numbers.
 // ".z" part may be omitted in regular releases.
 func Version() string {
+	// FORK(native-rate-limits): Expose the custom capability version for panel compatibility checks.
 	return fmt.Sprintf("%v.%v.%v%s", Version_x, Version_y, Version_z, featureVersion)
 }
 

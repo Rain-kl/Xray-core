@@ -25,6 +25,7 @@ type TrojanServerTarget struct {
 	Email    string   `json:"email"`
 	Password string   `json:"password"`
 	Flow     string   `json:"flow"`
+	// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 	RateLimitConfig
 }
 
@@ -37,6 +38,7 @@ type TrojanClientConfig struct {
 	Password string                `json:"password"`
 	Flow     string                `json:"flow"`
 	Servers  []*TrojanServerTarget `json:"servers"`
+	// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 	RateLimitConfig
 }
 
@@ -44,6 +46,7 @@ type TrojanClientConfig struct {
 func (c *TrojanClientConfig) Build() (proto.Message, error) {
 	errors.PrintNonRemovalDeprecatedFeatureWarning("Trojan (with no Flow, etc.)", "VLESS with Flow & Seed")
 
+	// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 	if len(c.Servers) > 0 && c.RateLimitConfig.HasLimits() {
 		return nil, errors.New("trojan servers: set rate limit fields on the target")
 	}
@@ -87,6 +90,7 @@ func (c *TrojanClientConfig) Build() (proto.Message, error) {
 				Password: rec.Password,
 			}),
 		}
+		// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 		rec.RateLimitConfig.Apply(user)
 		config.Server = &protocol.ServerEndpoint{
 			Address: rec.Address.Build(),
@@ -116,6 +120,7 @@ type TrojanUserConfig struct {
 	Level    byte   `json:"level"`
 	Email    string `json:"email"`
 	Flow     string `json:"flow"`
+	// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 	RateLimitConfig
 }
 
@@ -151,6 +156,7 @@ func (c *TrojanServerConfig) Build() (proto.Message, error) {
 				Password: rawUser.Password,
 			}),
 		}
+		// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 		rawUser.RateLimitConfig.Apply(config.Users[idx])
 		return nil
 	}

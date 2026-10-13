@@ -742,6 +742,7 @@ func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net
 		return readV(ctx, reader, writer, timer, readCounter)
 	}
 	inbound := session.InboundFromContext(ctx)
+	// FORK(native-rate-limits): Splice bypasses token waits, so capped users must retain buffered copying.
 	if inbound == nil || inbound.CanSpliceCopy == 3 || inbound.User.HasRateLimits() {
 		return readV(ctx, reader, writer, timer, readCounter)
 	}

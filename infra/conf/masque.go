@@ -42,6 +42,7 @@ type MasqueUserConfig struct {
 	Pass  string `json:"pass"`
 	Level uint32 `json:"level"`
 	Email string `json:"email"`
+	// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 	RateLimitConfig
 }
 
@@ -81,6 +82,7 @@ func (c *MasqueServerConfig) Build() (proto.Message, error) {
 			Level:   user.Level,
 			Account: serial.ToTypedMessage(&masque.Account{Password: user.Pass}),
 		}
+		// FORK(native-rate-limits): Preserve authenticated user caps across upstream sync; see FEATURES.md.
 		user.RateLimitConfig.Apply(userRecord)
 		config.Users = append(config.Users, userRecord)
 	}
