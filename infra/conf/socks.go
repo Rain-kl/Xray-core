@@ -27,13 +27,23 @@ const (
 	AuthMethodUserPass = "password"
 )
 
+// FORK(mixed-clients): Authentication names must stay independent of panel billing identities.
+type MixedClientConfig struct {
+	SocksAccount
+	Email string `json:"email"`
+	Level uint32 `json:"level"`
+	RateLimitConfig
+}
+
 type SocksServerConfig struct {
-	AuthMethod string          `json:"auth"`
-	Users      []*SocksAccount `json:"users"`
-	Accounts   []*SocksAccount `json:"accounts"`
-	UDP        bool            `json:"udp"`
-	Host       *Address        `json:"ip"`
-	UserLevel  uint32          `json:"userLevel"`
+	// FORK(mixed-clients): An explicit clients array selects managed password authentication.
+	Clients    []MixedClientConfig `json:"clients"`
+	AuthMethod string              `json:"auth"`
+	Users      []*SocksAccount     `json:"users"`
+	Accounts   []*SocksAccount     `json:"accounts"`
+	UDP        bool                `json:"udp"`
+	Host       *Address            `json:"ip"`
+	UserLevel  uint32              `json:"userLevel"`
 }
 
 func (v *SocksServerConfig) Build() (proto.Message, error) {
@@ -63,6 +73,20 @@ func (v *SocksServerConfig) Build() (proto.Message, error) {
 		config.Address = v.Host.Build()
 	}
 
+	// FORK(mixed-clients): Empty managed users must deny access rather than falling back to noauth.
+	if v.Clients != nil {
+		if v.AuthMethod != AuthMethodUserPass {
+			return nil, errors.New("mixed clients require password authentication")
+		}
+		if len(v.Accounts) > 0 || len(v.Users) > 0 {
+			return nil, errors.New("mixed clients cannot be combined with legacy accounts/users")
+		}
+		for _, client := range v.Clients {
+			user := &protocol.User{Email: client.Email, Level: client.Level, Account: serial.ToTypedMessage(client.SocksAccount.Build())}
+			client.RateLimitConfig.Apply(user)
+			config.Users = append(config.Users, user)
+		}
+	}
 	config.UserLevel = v.UserLevel
 	return config, nil
 }

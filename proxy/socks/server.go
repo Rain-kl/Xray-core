@@ -20,6 +20,7 @@ import (
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/http"
+	"github.com/xtls/xray-core/proxy/mixedauth"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/udp"
@@ -27,6 +28,8 @@ import (
 
 // Server is a SOCKS 5 proxy server
 type Server struct {
+	// FORK(mixed-clients): Both protocol branches must share dynamic authentication state.
+	users         *mixedauth.Users
 	config        *ServerConfig
 	policyManager policy.Manager
 	cone          bool
@@ -44,10 +47,20 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 	httpConfig := &http.ServerConfig{
 		UserLevel: config.UserLevel,
 	}
-	if config.AuthType == AuthType_PASSWORD {
-		httpConfig.Accounts = config.Accounts
+	// FORK(mixed-clients): Last-user removal must not turn the HTTP branch into an anonymous proxy.
+	users, err := configuredUsers(config)
+	if err != nil {
+		return nil, err
 	}
-	s.httpServer, _ = http.NewServer(ctx, httpConfig)
+	s.users = users
+	if config.AuthType == AuthType_PASSWORD {
+		s.httpServer, err = http.NewServerWithUsers(ctx, httpConfig, users)
+	} else {
+		s.httpServer, err = http.NewServer(ctx, httpConfig)
+	}
+	if err != nil {
+		return nil, err
+	}
 	return s, nil
 }
 
@@ -107,6 +120,7 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 
 	svrSession := &ServerSession{
 		config:       s.config,
+		users:        s.users,
 		address:      inbound.Gateway.Address,
 		port:         inbound.Gateway.Port,
 		localAddress: net.IPAddress(conn.LocalAddr().(*net.TCPAddr).IP),
@@ -133,7 +147,8 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 		return errors.New("failed to read request").Base(err)
 	}
 	if request.User != nil {
-		inbound.User.Email = request.User.Email
+		// FORK(mixed-clients): Preserve scoped identity and caps on TCP and the associated UDP session.
+		inbound.User = request.User
 	}
 
 	if err := conn.SetReadDeadline(time.Time{}); err != nil {
@@ -149,6 +164,8 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 				To:     dest,
 				Status: log.AccessAccepted,
 				Reason: "",
+				// FORK(mixed-clients): Audit must use the same client identity as billing.
+				Email: inbound.User.Email,
 			})
 		}
 		if inbound.CanSpliceCopy == 2 {
@@ -270,6 +287,8 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 					To:     destination,
 					Status: log.AccessAccepted,
 					Reason: "",
+					// FORK(mixed-clients): Audit must use the same client identity as billing.
+					Email: inbound.User.Email,
 				})
 			}
 

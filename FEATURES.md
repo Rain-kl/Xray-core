@@ -13,3 +13,11 @@
 - Preserve original IP destinations and export observed HTTP/TLS/QUIC/FakeDNS domains separately for website audit, including route-only sniffing.
 - Core integration: common/log/access.go and both app/dispatcher dispatch paths; panel: internal/audit/spool.go, audit ingestion and audit event display.
 - Design: [specification](docs/specs/sniffed-audit-domains.md). Implementation decision: [Agent Note](.agents/notes/sniffed-audit-domains.md). Upstream markers: FORK(sniffed-audit-domains). Legacy logs remain compatible; no retroactive IP-to-domain inference.
+
+## Managed mixed clients (mixed-clients)
+
+- **Background:** A mixed port must share the panel's client identity, billing, native limits and permission lifecycle across HTTP and SOCKS5.
+- **Change:** Adds a managed `clients` array with independent login and billing identity, a shared concurrent credential store and UserManager operations. Empty password-authenticated user lists deny access. Legacy accounts and standalone HTTP remain compatible. HTTP, SOCKS5 TCP and associated UDP carry the full user identity; successful audit records include that identity.
+- **Compatibility:** Requires `v26.10.10-feat.4` and the corresponding panel update. The panel excludes mixed from automatic subscriptions and offers manual credentials on its subscription info page.
+- **Files and markers:** `proxy/mixedauth`, `proxy/socks`, `proxy/http/server.go`, `infra/conf/socks.go`, `core/core.go`; upstream changes marked `FORK(mixed-clients)`.
+- **Design and implementation:** [Specification](docs/specs/mixed-clients.md), [Agent Note](.agents/notes/mixed-clients.md).

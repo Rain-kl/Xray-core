@@ -25,8 +25,8 @@ var (
 
 var (
 	build = "Custom"
-	// FORK(native-rate-limits): Identify binaries that can enforce the panel rate-limit wire fields.
-	featureVersion = "-feat.3"
+	// FORK(mixed-clients): Identify binaries that enforce managed mixed identities on both protocol branches.
+	featureVersion = "-feat.4"
 	codename       = "Xray, Penetrates Everything."
 	intro          = "A unified platform for anti-censorship."
 )

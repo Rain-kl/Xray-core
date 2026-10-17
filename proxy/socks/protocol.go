@@ -11,6 +11,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/proxy/mixedauth"
 	"github.com/xtls/xray-core/transport/internet"
 )
 
@@ -43,10 +44,13 @@ var addrParser = protocol.NewAddressParser(
 )
 
 type ServerSession struct {
-	config       *ServerConfig
-	address      net.Address
-	port         net.Port
-	localAddress net.Address
+	// FORK(mixed-clients): In-flight sessions consult the shared dynamic credential table.
+	users         *mixedauth.Users
+	authenticated *protocol.MemoryUser
+	config        *ServerConfig
+	address       net.Address
+	port          net.Port
+	localAddress  net.Address
 }
 
 func (s *ServerSession) handshake4(cmd byte, reader io.Reader, writer io.Writer) (*protocol.RequestHeader, error) {
@@ -126,7 +130,13 @@ func (s *ServerSession) auth5(nMethod byte, reader io.Reader, writer io.Writer) 
 			return "", errors.New("failed to read username and password for authentication").Base(err)
 		}
 
-		if !s.config.HasAccount(username, password) {
+		// FORK(mixed-clients): Keep static session fixtures compatible while live servers use managed users.
+		valid := s.config.HasAccount(username, password)
+		if s.users != nil {
+			s.authenticated = s.users.Authenticate(username, password)
+			valid = s.authenticated != nil
+		}
+		if !valid {
 			writeSocks5AuthenticationResponse(writer, 0x01, 0xFF)
 			return "", errors.New("invalid username or password")
 		}
@@ -162,7 +172,15 @@ func (s *ServerSession) handshake5(nMethod byte, reader io.Reader, writer net.Co
 
 	request := new(protocol.RequestHeader)
 	if username != "" {
-		request.User = &protocol.MemoryUser{Email: username}
+		// FORK(mixed-clients): Use the authenticated user, not the externally visible username, for billing.
+		if s.users != nil {
+			request.User = s.authenticated
+			if request.User == nil {
+				return nil, nil, errors.New("mixed user was removed during handshake")
+			}
+		} else {
+			request.User = &protocol.MemoryUser{Email: username}
+		}
 	}
 	switch cmd {
 	case cmdTCPConnect, cmdTorResolve, cmdTorResolvePTR:

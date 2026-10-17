@@ -23,12 +23,16 @@ import (
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/proxy"
+	"github.com/xtls/xray-core/proxy/mixedauth"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
 // Server is an HTTP proxy server.
 type Server struct {
+	// FORK(mixed-clients): Authentication stays mandatory when the shared user table becomes empty.
+	users         *mixedauth.Users
+	authRequired  bool
 	config        *ServerConfig
 	policyManager policy.Manager
 }
@@ -38,6 +42,7 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 	v := core.MustFromContext(ctx)
 	s := &Server{
 		config:        config,
+		authRequired:  len(config.Accounts) > 0,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 	}
 
@@ -48,6 +53,17 @@ func (s *Server) policy() policy.Session {
 	config := s.config
 	p := s.policyManager.ForLevel(config.UserLevel)
 	return p
+}
+
+// FORK(mixed-clients): Mixed injects one credential table for both HTTP and SOCKS requests.
+func NewServerWithUsers(ctx context.Context, config *ServerConfig, users *mixedauth.Users) (*Server, error) {
+	server, err := NewServer(ctx, config)
+	if err != nil {
+		return nil, err
+	}
+	server.users = users
+	server.authRequired = true
+	return server, nil
 }
 
 // Network implements proxy.Inbound.
@@ -118,13 +134,24 @@ Start:
 		return errors.New("failed to read http request").Base(err)
 	}
 
-	if len(s.config.Accounts) > 0 {
+	// FORK(mixed-clients): A positive CONNECT response is never permission to bypass revoked accounts.
+	if s.authRequired {
 		user, pass, ok := parseBasicAuth(request.Header.Get("Proxy-Authorization"))
-		if !ok || !s.config.HasAccount(user, pass) {
+		valid := ok && s.config.HasAccount(user, pass)
+		var authenticated *protocol.MemoryUser
+		if s.users != nil {
+			authenticated = s.users.Authenticate(user, pass)
+			valid = ok && authenticated != nil
+		}
+		if !valid {
 			return common.Error2(conn.Write([]byte("HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=\"proxy\"\r\n\r\n")))
 		}
 		if inbound != nil {
-			inbound.User.Email = user
+			if authenticated != nil {
+				inbound.User = authenticated
+			} else {
+				inbound.User.Email = user
+			}
 		}
 	}
 
@@ -150,6 +177,8 @@ Start:
 		To:     request.URL,
 		Status: log.AccessAccepted,
 		Reason: "",
+		// FORK(mixed-clients): Audit must use the same client identity as billing.
+		Email: inbound.User.Email,
 	})
 
 	if strings.EqualFold(request.Method, "CONNECT") {
