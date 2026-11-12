@@ -20,7 +20,7 @@ The cap is enforced in the proxy data path, so limited sessions do not use Visio
 
 ## Compatibility and verification
 
-The custom core retains the upstream byte-version `26.10.10` and uses `-feat.2` as the default feature suffix. Release tags of the form `v26.10.10-feat.*` stamp their suffix into the build. The panel requires `v26.10.10-feat.2` or newer for native limits.
+The custom core follows the merged upstream byte-version and uses `-feat.4` as the default feature suffix. Release tags of the form `v*-feat.*` stamp their suffix into the build. The panel requires `v26.10.10-feat.2` or newer for native limits.
 
 This implementation is based on upstream [PR #6050](https://github.com/XTLS/Xray-core/pull/6050), original commit `da56e92`, cherry-picked as `4e99a70`, with cancellation, bounded-wait, splice, and registry-lifecycle corrections.
 

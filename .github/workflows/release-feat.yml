@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Target release tag (e.g. v26.10.10-feat.4)'
+        description: 'Target release tag (e.g. v26.11.9-feat.4)'
         required: false
-        default: 'v26.10.10-feat.4'
+        default: 'v26.11.9-feat.4'
   push:
     tags:
       - 'v*'
@@ -242,7 +242,7 @@ jobs:
           elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
             TAG="${GITHUB_REF#refs/tags/}"
           else
-            TAG="v26.10.10-feat.4"
+            TAG="v26.11.9-feat.4"
           fi
           echo "RELEASE_TAG=${TAG}" >> $GITHUB_ENV
           echo "release_tag=${TAG}" >> $GITHUB_OUTPUT

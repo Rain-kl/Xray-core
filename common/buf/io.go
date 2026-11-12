@@ -80,7 +80,7 @@ func (r *TimeoutWrapperReader) ReadMultiBufferTimeout(duration time.Duration) (M
 		r.done = nil
 		return r.mb, r.err
 	case <-timeout:
-		return nil, nil
+		return nil, ErrReadTimeout
 	}
 }
 
