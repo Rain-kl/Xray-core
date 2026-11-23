@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Target release tag (e.g. v26.11.9-feat.4)'
+        description: 'Target release tag (e.g. v26.11.9-feat.5)'
         required: false
-        default: 'v26.11.9-feat.4'
+        default: 'v26.11.9-feat.5'
   push:
     tags:
       - 'v*'
@@ -110,6 +110,8 @@ jobs:
         run: go test ./common/log ./common/protocol ./app/dispatcher ./testing/trafficlog -count=1
       - name: Verify concurrent accounting and cancellation
         run: go test -race ./common/log ./common/protocol ./app/dispatcher -count=1
+      - name: Verify REALITY fallback SNI and ECH guard
+        run: cd third_party/reality && go test -race ./... -count=1
 
   build:
     needs: [check-assets, validate]
@@ -242,7 +244,7 @@ jobs:
           elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
             TAG="${GITHUB_REF#refs/tags/}"
           else
-            TAG="v26.11.9-feat.4"
+            TAG="v26.11.9-feat.5"
           fi
           echo "RELEASE_TAG=${TAG}" >> $GITHUB_ENV
           echo "release_tag=${TAG}" >> $GITHUB_OUTPUT
@@ -258,7 +260,7 @@ jobs:
 
       - name: Set feature version suffix
         run: |
-          SUFFIX='-feat.4'
+          SUFFIX='-feat.5'
           if [[ "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-feat\.[0-9]+)$ ]]; then
             SUFFIX="${BASH_REMATCH[1]}"
           fi

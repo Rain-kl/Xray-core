@@ -25,8 +25,8 @@ var (
 
 var (
 	build = "Custom"
-	// FORK(mixed-clients): Identify binaries that enforce managed mixed identities on both protocol branches.
-	featureVersion = "-feat.4"
+	// FORK(reality-fallback-sni-guard): Identify binaries that enforce strict REALITY fallback SNI and ECH checks.
+	featureVersion = "-feat.5"
 	codename       = "Xray, Penetrates Everything."
 	intro          = "A unified platform for anti-censorship."
 )
