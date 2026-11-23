@@ -25,6 +25,13 @@
 - **Files and markers:** `proxy/mixedauth`, `proxy/socks`, `proxy/http/server.go`, `infra/conf/socks.go`, `core/core.go`; upstream changes marked `FORK(mixed-clients)`.
 - **Design and implementation:** [Specification](docs/specs/mixed-clients.md), [Agent Note](.agents/notes/mixed-clients.md).
 
+## REALITY fallback SNI guard (reality-fallback-sni-guard)
+
+- **Background:** When REALITY `dest`/`target` uses a multi-tenant CDN such as Cloudflare, upstream `xtls/reality` dials `dest` and mirrors client bytes before verifying `serverNames`, and keeps relaying mismatched SNIs or unauthenticated outer-SNI + ECH requests. Attackers can abuse this to tunnel traffic to arbitrary sites hosted behind the same CDN.
+- **Change:** Buffers and parses `ClientHello` before dialing `config.Dest`, validates SNI case-insensitively against `config.ServerNames`, authenticates REALITY clients first (preserving classical X25519 and `X25519MLKEM768` shares as well as Chrome uTLS GREASE ECH), and rejects unauthenticated fallback connections with empty SNI or `encrypted_client_hello` extensions before dialing `dest`. Sends fatal TLS `unrecognized_name` / `handshake_failure` alerts on rejected TLS ClientHellos and closes non-TLS or oversized handshakes without dialing.
+- **Files and markers:** `third_party/reality/fallback_guard.go`, `third_party/reality/fallback_guard_test.go`, `third_party/reality/tls.go` (`FORK-BEGIN(reality-fallback-sni-guard)` / `FORK-END(reality-fallback-sni-guard)`).
+- **Design and implementation:** [Specification](docs/specs/reality-fallback-sni-guard.md), [Agent Note](.agents/notes/reality-fallback-sni-guard.md).
+
 ## 其他更新
 
 - 2026-11-12：同步上游 `c77a4d0e..c4561418`，保留限速、嗅探审计、managed mixed 与纯 X25519 兼容；更新 `third_party/reality` 至核心所需 `4bb46b2afd8b`，在握手校验处保留 `FORK(其他更新)`。规格：[同步规格](docs/specs/upstream-sync-20261112.md)，实现：[Agent Note](.agents/notes/upstream-sync-20261112.md)。
